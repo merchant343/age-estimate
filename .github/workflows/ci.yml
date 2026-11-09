@@ -176,7 +176,13 @@ jobs:
         shell: powershell -NoProfile -ExecutionPolicy Bypass -File {0}
         run: |
           New-Item -ItemType Directory -Force -Path verification_logs | Out-Null
-          $monitor = Start-Process powershell.exe -WindowStyle Hidden -PassThru -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',"$env:GITHUB_WORKSPACE/scripts/monitor_service.ps1",'-Url','http://127.0.0.1:8000','-DurationSec','90','-LogPath',"$env:GITHUB_WORKSPACE/verification_logs/deploy.csv",'-SummaryPath',"$env:GITHUB_WORKSPACE/verification_logs/deploy-summary.md")
+          $scriptPath = Join-Path $env:GITHUB_WORKSPACE 'scripts\monitor_service.ps1'
+          $logPath = Join-Path $env:GITHUB_WORKSPACE 'verification_logs\deploy.csv'
+          $summaryPath = Join-Path $env:GITHUB_WORKSPACE 'verification_logs\deploy-summary.md'
+          $stdoutPath = Join-Path $env:GITHUB_WORKSPACE 'verification_logs\monitor.stdout.log'
+          $stderrPath = Join-Path $env:GITHUB_WORKSPACE 'verification_logs\monitor.stderr.log'
+          $args = @('-NoProfile','-ExecutionPolicy','Bypass','-File',('"' + $scriptPath + '"'),'-Url','http://127.0.0.1:8000','-DurationSec','90','-LogPath',('"' + $logPath + '"'),'-SummaryPath',('"' + $summaryPath + '"'))
+          $monitor = Start-Process powershell.exe -WindowStyle Hidden -PassThru -ArgumentList $args -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
           $monitor.Id | Set-Content -Encoding ascii verification_logs/monitor.pid
           Start-Sleep -Seconds 2
           if ($monitor.HasExited) { throw '독립 모니터링 프로세스가 시작 직후 종료되었습니다.' }
