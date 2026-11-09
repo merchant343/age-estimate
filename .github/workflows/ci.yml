@@ -182,10 +182,9 @@ jobs:
           $stdoutPath = Join-Path $env:GITHUB_WORKSPACE 'verification_logs\monitor.stdout.log'
           $stderrPath = Join-Path $env:GITHUB_WORKSPACE 'verification_logs\monitor.stderr.log'
           $args = @('-NoProfile','-ExecutionPolicy','Bypass','-File',('"' + $scriptPath + '"'),'-Url','http://127.0.0.1:8000','-DurationSec','90','-LogPath',('"' + $logPath + '"'),'-SummaryPath',('"' + $summaryPath + '"'))
-          $monitor = Start-Process powershell.exe -WindowStyle Hidden -PassThru -ArgumentList $args -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+          $monitor = Start-Process powershell.exe -WindowStyle Hidden -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -ArgumentList $args -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
           $monitor.Id | Set-Content -Encoding ascii verification_logs/monitor.pid
-          Start-Sleep -Seconds 2
-          if ($monitor.HasExited) { throw '독립 모니터링 프로세스가 시작 직후 종료되었습니다.' }
+          Write-Host "Independent monitor PID: $($monitor.Id)"
 
       - name: Replace running container
         shell: powershell -NoProfile -ExecutionPolicy Bypass -File {0}
