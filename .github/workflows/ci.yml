@@ -103,14 +103,37 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           Write-Host "Docker CLI:"; docker --version
-          try {
-            docker info
-          } catch {
-            Write-Error "Docker daemon에 연결할 수 없습니다. Self-hosted Runner 컴퓨터에서 Docker Desktop/Docker Engine을 시작하고 Runner 서비스를 재시작하세요."
-            Write-Host "Docker contexts:"; docker context ls
+          try { docker info | Out-Host; exit 0 } catch { Write-Host 'Docker daemon이 아직 응답하지 않습니다.' }
+
+          $candidates = @(
+            "$env:ProgramFiles\Docker\Docker\Docker Desktop.exe",
+            "$env:ProgramW6432\Docker\Docker\Docker Desktop.exe",
+            "$env:LOCALAPPDATA\Docker\Docker Desktop.exe"
+          ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -Unique
+
+          if ($candidates.Count -gt 0) {
+            Write-Host "Docker Desktop 시작: $($candidates[0])"
+            Start-Process -FilePath $candidates[0]
+          } else {
+            Write-Error 'Docker Desktop 실행 파일을 찾지 못했습니다. Self-hosted Runner에 Docker Desktop 또는 Docker Engine을 설치해야 합니다.'
+            docker context ls
             Get-Service -Name 'com.docker.service','docker' -ErrorAction SilentlyContinue | Format-Table Name,Status,StartType
-            throw
+            exit 1
           }
+
+          1..60 | ForEach-Object {
+            Start-Sleep -Seconds 2
+            try {
+              docker info | Out-Host
+              Write-Host 'Docker daemon 준비 완료'
+              exit 0
+            } catch {
+              Write-Host "Docker daemon 대기 중... ($_/60)"
+            }
+          }
+          Write-Error 'Docker Desktop을 시작했지만 120초 안에 Docker daemon이 준비되지 않았습니다.'
+          docker context ls
+          exit 1
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
