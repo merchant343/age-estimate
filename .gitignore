@@ -40,3 +40,5 @@ test_*.webp
 /run.sh
 /svc.cmd
 /svc.sh
+/artifacts/
+/verification_logs/

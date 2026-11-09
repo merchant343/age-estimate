@@ -1,5 +1,5 @@
 from pathlib import Path
-import io, re
+import io, re, os
 from typing import Any
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
@@ -12,7 +12,7 @@ app.mount('/static', StaticFiles(directory=BASE_DIR/'static'), name='static')
 @app.get('/')
 def index(): return FileResponse(BASE_DIR/'static'/'index.html')
 @app.get('/health')
-def health(): return {'status':'ok','model':MODEL_ID,'model_loaded':classifier is not None,'model_error':model_error}
+def health(): return {'status':'ok','model':MODEL_ID,'model_version':os.getenv('APP_VERSION','dev'),'model_loaded':classifier is not None,'model_error':model_error}
 def load_model():
  global classifier,model_error
  if classifier is not None:return classifier
@@ -39,7 +39,7 @@ async def analyze(file:UploadFile=File(...),region:str=Form('kr')):
  except (UnidentifiedImageError,OSError):return JSONResponse({'error':'이미지 내용을 읽을 수 없습니다. 파일을 확인해 주세요.'},400)
  try:
   outputs=load_model()(image,top_k=3); best=outputs[0]; start,end=age_range(best['label']); rat,desc=rating(start,end,region)
-  return {'filename':file.filename,'region':region,'estimated_age_range':f'{start}–{end}세','confidence':round(float(best['score']),4),'rating':rat,'rating_description':desc,'alternatives':[{'label':x['label'],'score':round(float(x['score']),4)} for x in outputs],'notice':'AI가 표지 이미지의 시각적 단서를 바탕으로 추정한 참고 결과이며, 실제 이용 연령이나 공식 등급을 보장하지 않습니다.'}
+  return {'filename':file.filename,'region':region,'model_version':os.getenv('APP_VERSION','dev'),'estimated_age_range':f'{start}–{end}세','confidence':round(float(best['score']),4),'rating':rat,'rating_description':desc,'alternatives':[{'label':x['label'],'score':round(float(x['score']),4)} for x in outputs],'notice':'AI가 표지 이미지의 시각적 단서를 바탕으로 추정한 참고 결과이며, 실제 이용 연령이나 공식 등급을 보장하지 않습니다.'}
  except RuntimeError as exc:return JSONResponse({'error':str(exc),'hint':'처음 실행 시 모델 다운로드가 필요합니다. 인터넷 연결 후 다시 시도해 주세요.'},503)
  except Exception as exc:return JSONResponse({'error':f'분석 중 오류가 발생했습니다: {type(exc).__name__}: {exc}'},500)
 if __name__=='__main__':

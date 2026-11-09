@@ -13,6 +13,29 @@ env:
   IMAGE_NAME: cover-age-estimator
 
 jobs:
+  ml-evaluation:
+    name: Evaluate preprocessing update
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install evaluation dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Generate fixed synthetic dataset
+        run: python scripts/generate_synthetic_dataset.py
+      - name: Compare baseline and two preprocessing candidates
+        run: python scripts/evaluate_preprocessing.py | tee artifacts/evaluation.log
+      - name: Upload evaluation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-model-evaluation
+          path: artifacts/
+
   build-and-test:
     name: Build and verify image
     runs-on: ubuntu-latest
@@ -56,7 +79,7 @@ jobs:
   publish:
     name: Push image to Docker Hub
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-    needs: build-and-test
+    needs: [build-and-test, ml-evaluation]
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -149,6 +172,15 @@ jobs:
           $ErrorActionPreference = 'Stop'
           docker pull $env:IMAGE
 
+      - name: Start independent deployment monitor
+        shell: powershell -NoProfile -ExecutionPolicy Bypass -File {0}
+        run: |
+          New-Item -ItemType Directory -Force -Path verification_logs | Out-Null
+          $monitor = Start-Process powershell.exe -WindowStyle Hidden -PassThru -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',"$env:GITHUB_WORKSPACE/scripts/monitor_service.ps1",'-Url','http://127.0.0.1:8000','-DurationSec','90','-LogPath',"$env:GITHUB_WORKSPACE/verification_logs/deploy.csv",'-SummaryPath',"$env:GITHUB_WORKSPACE/verification_logs/deploy-summary.md")
+          $monitor.Id | Set-Content -Encoding ascii verification_logs/monitor.pid
+          Start-Sleep -Seconds 2
+          if ($monitor.HasExited) { throw '독립 모니터링 프로세스가 시작 직후 종료되었습니다.' }
+
       - name: Replace running container
         shell: powershell -NoProfile -ExecutionPolicy Bypass -File {0}
         run: |
@@ -157,7 +189,7 @@ jobs:
           if ($existing) {
             docker rm -f $env:CONTAINER_NAME
           }
-          docker run -d --restart unless-stopped --name $env:CONTAINER_NAME -p "${env:HOST_PORT}:8000" $env:IMAGE
+          docker run -d --restart unless-stopped --name $env:CONTAINER_NAME -e "APP_VERSION=$env:GITHUB_SHA" -p "${env:HOST_PORT}:8000" $env:IMAGE
 
       - name: Verify deployed service
         shell: powershell -NoProfile -ExecutionPolicy Bypass -File {0}
@@ -189,3 +221,24 @@ jobs:
         run: |
           docker ps -a --filter "name=^/$env:CONTAINER_NAME$" 2>&1
           docker logs $env:CONTAINER_NAME 2>&1
+
+      - name: Finish deployment monitor and publish summary
+        if: always()
+        shell: powershell -NoProfile -ExecutionPolicy Bypass -File {0}
+        run: |
+          $pidFile='verification_logs/monitor.pid'
+          if (Test-Path $pidFile) {
+            $monitorPid=[int](Get-Content $pidFile)
+            Wait-Process -Id $monitorPid -Timeout 120 -ErrorAction SilentlyContinue
+          }
+          if (Test-Path 'verification_logs/deploy-summary.md') {
+            Get-Content 'verification_logs/deploy-summary.md' | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          } else { Add-Content -Encoding UTF8 -Path $env:GITHUB_STEP_SUMMARY -Value "## Deployment verification`nMonitor summary was not produced." }
+
+      - name: Upload deployment verification logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-verification-${{ github.run_id }}
+          path: verification_logs/
+          if-no-files-found: warn
