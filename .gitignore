@@ -25,3 +25,18 @@ test_*.jpg
 test_*.png
 test_*.webp
 .DS_Store
+
+# GitHub Actions self-hosted runner files
+/actions-runner/
+/_diag/
+/externals/
+/_work/
+/.runner
+/.credentials
+/.credentials_rsaparams
+/config.cmd
+/config.sh
+/run.cmd
+/run.sh
+/svc.cmd
+/svc.sh
