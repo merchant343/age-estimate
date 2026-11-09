@@ -99,7 +99,7 @@ jobs:
       IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/cover-age-estimator:latest
     steps:
       - name: Check Docker daemon
-        shell: pwsh
+        shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           docker version
@@ -114,13 +114,13 @@ jobs:
           logout: true
 
       - name: Pull published image
-        shell: pwsh
+        shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           docker pull $env:IMAGE
 
       - name: Replace running container
-        shell: pwsh
+        shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           $existing = docker ps -aq --filter "name=^/$env:CONTAINER_NAME$"
@@ -130,7 +130,7 @@ jobs:
           docker run -d --restart unless-stopped --name $env:CONTAINER_NAME -p "${env:HOST_PORT}:8000" $env:IMAGE
 
       - name: Verify deployed service
-        shell: pwsh
+        shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           $healthy = $false
@@ -154,7 +154,7 @@ jobs:
 
       - name: Show container status on failure
         if: failure()
-        shell: pwsh
+        shell: powershell
         run: |
           docker ps -a --filter "name=^/$env:CONTAINER_NAME$"
           docker logs $env:CONTAINER_NAME 2>&1
